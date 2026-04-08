@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
+#include <stddef.h>
 
 #define SSO_MAX 15
 
@@ -25,30 +26,35 @@ typedef struct String
 } String;
 
 
-#define _STR_VIEW(s, cstr, n)        \
-    do {                             \
-        (s).len = (n);               \
-        (s).ptr = (char*)(cstr);     \
-        (s).cap = 0;                 \
-        (s).kind = STR_KIND_VIEW;    \
-    } while (0)
+static inline String _str_view(const char* cstr, size_t n)
+{
+  String out = { 0 };
+  out.len = n;
+  out.ptr = (char*) cstr;
+  out.cap = 0;
+  out.kind = STR_KIND_VIEW;
+  return out;
+}
 
-#define _STR_CPY(s, cstr, n)                     \
-    do {                                         \
-        size_t _n = (n);                         \
-        (s).len = _n;                            \
-        if (_n <= SSO_MAX) {                     \
-            (s).kind = STR_KIND_SSO;             \
-            memcpy((s).buf, (cstr), _n);         \
-            (s).buf[_n] = '\0';                  \
-        } else {                                 \
-            (s).kind = STR_KIND_HEAP;            \
-            (s).cap = _n + 1;                    \
-            (s).ptr = (char*)malloc(_n + 1);     \
-            memcpy((s).ptr, (cstr), _n);         \
-            (s).ptr[_n] = '\0';                  \
-        }                                        \
-    } while (0)
+static inline String _str_cpy(const char* cstr, size_t n)
+{
+  String out;
+  out.len = n;
+  if (n <= SSO_MAX)
+  {
+    out.kind = STR_KIND_SSO;
+    memcpy(out.buf, (cstr), n);
+    out.buf[n] = '\0';
+    return out;
+  }
+
+  out.kind = STR_KIND_HEAP;
+  out.cap = n + 1;
+  out.ptr = (char*) malloc(n + 1);
+  memcpy(out.ptr, cstr, n);
+  out.ptr[n] = '\0';
+  return out;
+}
 
 #define STR_IS_SSO(s)   ((s).kind == STR_KIND_SSO)
 #define STR_IS_VIEW(s)  ((s).kind == STR_KIND_VIEW)
@@ -58,7 +64,6 @@ static inline char* str_data(String* s)
 {
   return s->kind == STR_KIND_SSO ? s->buf : s->ptr;
 }
-#define STR_DATA(s)  str_data(&(s))
 #define STR_FREE(s)                     \
     do {                                \
         if (!STR_IS_SSO(s) &&           \
@@ -71,95 +76,78 @@ static inline char* str_data(String* s)
 
 static inline String str_clone(String s)
 {
-  String out;
-  _STR_CPY(out, STR_DATA(s), s.len);
-  return out;
+  return _str_cpy(str_data(&s), s.len);
 }
 
 #ifndef __cplusplus
 static inline String _str_from_cstr(const char* s)
 {
-  String out;
-  _STR_CPY(out, s, strlen(s));
-  return out;
+  return _str_cpy(s, strlen(s));
 }
 
 static inline String _str_view_from_cstr(const char* s)
 {
-  String out;
-  _STR_VIEW(out, s, strlen(s));
-  return out;
+  return _str_view(s, strlen(s));
 }
 static inline String _str_from_string(String s)
 {
   return s;
 }
-//-----------------------------
-static inline String _str_from_cstr_mut(char *s)
+static inline String _str_from_cstr_mut(char* s)
 {
-    return _str_from_cstr((const char *)s);
+  return _str_from_cstr((const char*) s);
 }
 
-static inline String _str_view_from_cstr_mut(char *s)
+static inline String _str_view_from_cstr_mut(char* s)
 {
-    return _str_view_from_cstr((const char *)s);
+  return _str_view_from_cstr((const char*) s);
 }
 
-#define STR(x)                        \
+#define str(x)                        \
     _Generic((0, (x)),                \
         String: _str_from_string,     \
         char *: _str_from_cstr_mut,   \
         const char *: _str_from_cstr  \
     )(x)
 
-#define STR_VIEW(x)                        \
+#define str_view(x)                        \
     _Generic((0, (x)),                     \
         String: _str_from_string,          \
         char *: _str_view_from_cstr_mut,   \
         const char *: _str_view_from_cstr  \
     )(x)
-//-----------------------------
-
 #else
-static inline String STR(String s)
+static inline String str(String s)
 {
   return s;
 }
-static inline String STR(char* s)
+static inline String str(char* s)
 {
-  String out;
-  _STR_CPY(out, s, strlen(s));
-  return out;
+  return _str_cpy(s, strlen(s));
 }
-static inline String STR(const char* s)
+static inline String str(const char* s)
 {
-  String out;
-  _STR_CPY(out, s, strlen(s));
-  return out;
+  return _str_cpy(s, strlen(s));
 }
 
-static inline String STR_VIEW(String s) { return s; }
-static inline String STR_VIEW(const char* s)
+static inline String str_view(String s) { return s; }
+static inline String str_view(const char* s)
 {
-  String out;
-  _STR_VIEW(out, s, strlen(s));
-  return out;
+  return _str_view(s, strlen(s));
 }
-static inline String STR_VIEW(char* s)
+static inline String str_view(char* s)
 {
-  String out;
-  _STR_VIEW(out, s, strlen(s));
-  return out;
+  return _str_view(s, strlen(s));
 }
 #endif
 
 static inline int str_eq(String a, String b)
 {
-  return a.len == b.len && memcmp(STR_DATA(a), STR_DATA(b), a.len) == 0;
+  return a.len == b.len && memcmp(str_data(&a), str_data(&b), a.len) == 0;
 }
 static inline int c_str_eq(String a, char* b)
 {
-  return a.len == strlen(b) && memcmp(STR_DATA(a), b, a.len) == 0;
+  return a.len == strlen(b) && memcmp(str_data(&a), b, a.len) == 0;
 }
 
 static inline int _str_reserve(String* s, size_t need)
@@ -185,7 +173,7 @@ static inline int _str_reserve(String* s, size_t need)
   if (!p)
     return 0;
 
-  memcpy(p, STR_DATA(*s), s->len);
+  memcpy(p, str_data(s), s->len);
   p[s->len] = '\0';
   s->ptr = p;
   s->cap = need;
@@ -200,7 +188,7 @@ static inline int str_cat(String* dst, String src)
 
   if (new_len <= SSO_MAX)
   {
-    char* src_data = STR_DATA(src);
+    char* src_data = str_data(&src);
     if (STR_IS_VIEW(*dst))
     {
       const char* view_ptr = dst->ptr;
@@ -213,14 +201,14 @@ static inline int str_cat(String* dst, String src)
     return 1;
   }
 
-  size_t alias_offset = 0;
-  int aliased = STR_IS_HEAP(*dst) && STR_DATA(src) >= dst->ptr && STR_DATA(src) < dst->ptr + dst->len;
+  ptrdiff_t alias_offset = 0;
+  int aliased = STR_IS_HEAP(*dst) && str_data(&src) >= dst->ptr && str_data(&src) < dst->ptr + dst->len;
   if (aliased)
-    alias_offset = STR_DATA(src) - dst->ptr;
+    alias_offset = str_data(&src) - dst->ptr;
 
   if (!_str_reserve(dst, new_len + 1))
     return 0;
-  char* src_data = aliased ? dst->ptr + alias_offset : STR_DATA(src);
+  char* src_data = aliased ? dst->ptr + alias_offset : str_data(&src);
 
   memmove(dst->ptr + old_len, src_data, src.len);
   dst->ptr[new_len] = '\0';
@@ -230,7 +218,4 @@ static inline int str_cat(String* dst, String src)
 }
 
 
-#define STR_EQ(a, b)       str_eq((a), (b))
-#define STR_EMPTY(s)       ((s).len == 0)
-#define C_STR_EQ(a, b)     c_str_eq((a), (b))
-#define STR_CAT(dst, src)  str_cat(&(dst), (src))
+#define str_empty(s)       ((s).len == 0)
